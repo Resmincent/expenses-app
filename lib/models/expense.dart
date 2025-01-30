@@ -1,10 +1,25 @@
 import 'package:flutter/material.dart';
+import 'package:hive/hive.dart';
 import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
 
+part 'expense.g.dart';
+
 const uuid = Uuid();
 
-enum Category { food, travel, vehicle, family, etc }
+@HiveType(typeId: 0)
+enum Category {
+  @HiveField(0)
+  food,
+  @HiveField(1)
+  travel,
+  @HiveField(2)
+  vehicle,
+  @HiveField(3)
+  family,
+  @HiveField(4)
+  etc
+}
 
 const categoryIcons = {
   Category.food: Icons.lunch_dining,
@@ -14,19 +29,29 @@ const categoryIcons = {
   Category.etc: Icons.category,
 };
 
-class Expense {
+@HiveType(typeId: 1)
+class Expense extends HiveObject {
+  @HiveField(0)
   final String id;
+
+  @HiveField(1)
   final String title;
+
+  @HiveField(2)
   final double amount;
+
+  @HiveField(3)
   final DateTime date;
+
+  @HiveField(4)
   final Category category;
 
-  Expense(
-      {required this.title,
-      required this.amount,
-      required this.date,
-      required this.category})
-      : id = uuid.v4();
+  Expense({
+    required this.title,
+    required this.amount,
+    required this.date,
+    required this.category,
+  }) : id = uuid.v4();
 
   String get formattedAmount {
     final formatter = NumberFormat.currency(
@@ -43,8 +68,12 @@ class Expense {
   }
 }
 
-class ExpenseBucket {
+@HiveType(typeId: 2)
+class ExpenseBucket extends HiveObject {
+  @HiveField(0)
   final Category category;
+
+  @HiveField(1)
   final List<Expense> expenses;
 
   ExpenseBucket({required this.category, required this.expenses});
@@ -56,7 +85,6 @@ class ExpenseBucket {
 
   double get totalExpense {
     double sum = 0;
-
     for (final expense in expenses) {
       sum += expense.amount;
     }

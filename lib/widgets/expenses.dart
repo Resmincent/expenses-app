@@ -3,6 +3,7 @@ import 'package:expense_app/widgets/expenses_list/expenses_list.dart';
 import 'package:expense_app/models/expense.dart';
 import 'package:expense_app/widgets/new_expenses.dart';
 import 'package:flutter/material.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 
 class Expenses extends StatefulWidget {
   const Expenses({super.key});
@@ -12,7 +13,25 @@ class Expenses extends StatefulWidget {
 }
 
 class _ExpensesState extends State<Expenses> {
-  final List<Expense> _regiseredExpenses = [];
+  late Box<Expense> _expenseBox;
+  List<Expense> _registeredExpenses = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _initHive();
+  }
+
+  Future<void> _initHive() async {
+    _expenseBox = Hive.box<Expense>('expenses');
+    _loadExpenses();
+  }
+
+  void _loadExpenses() {
+    setState(() {
+      _registeredExpenses = _expenseBox.values.toList();
+    });
+  }
 
   void _openAddExpenseOverlay() {
     showModalBottomSheet(
@@ -24,18 +43,30 @@ class _ExpensesState extends State<Expenses> {
     );
   }
 
-  void _addExpense(Expense expense) {
+  Future<void> _addExpense(Expense expense) async {
     setState(() {
-      _regiseredExpenses.add(expense);
+      _registeredExpenses.add(expense);
     });
   }
 
-  void _removeExpense(Expense expense) {
-    final expenseIndex = _regiseredExpenses.indexOf(expense);
+  Future<void> _removeExpense(Expense expense) async {
+    final expenseIndex = _registeredExpenses.indexOf(expense);
+    final deletedExpense = _registeredExpenses[expenseIndex];
+
+    // Find the key in Hive box for this expense
+    final key = _expenseBox.keys.firstWhere(
+      (k) => _expenseBox.get(k)?.id == expense.id,
+      orElse: () => -1,
+    );
+
+    if (key != -1) {
+      await _expenseBox.delete(key);
+    }
 
     setState(() {
-      _regiseredExpenses.remove(expense);
+      _registeredExpenses.remove(expense);
     });
+
     ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -43,12 +74,11 @@ class _ExpensesState extends State<Expenses> {
         content: const Text('Expense Deleted'),
         action: SnackBarAction(
           label: 'Undo',
-          onPressed: () {
-            setState(
-              () {
-                _regiseredExpenses.insert(expenseIndex, expense);
-              },
-            );
+          onPressed: () async {
+            await _expenseBox.add(deletedExpense);
+            setState(() {
+              _registeredExpenses.insert(expenseIndex, deletedExpense);
+            });
           },
         ),
       ),
@@ -63,9 +93,9 @@ class _ExpensesState extends State<Expenses> {
       child: Text('Tidak ada pengeluaran'),
     );
 
-    if (_regiseredExpenses.isNotEmpty) {
+    if (_registeredExpenses.isNotEmpty) {
       mainContent = ExpensesList(
-        expenses: _regiseredExpenses,
+        expenses: _registeredExpenses,
         onRemoveExpense: _removeExpense,
       );
     }
@@ -77,9 +107,7 @@ class _ExpensesState extends State<Expenses> {
         ),
         actions: [
           IconButton(
-            onPressed: () {
-              _openAddExpenseOverlay();
-            },
+            onPressed: _openAddExpenseOverlay,
             icon: const Icon(
               Icons.add,
             ),
@@ -89,13 +117,13 @@ class _ExpensesState extends State<Expenses> {
       body: width < 600
           ? Column(
               children: [
-                Chart(expenses: _regiseredExpenses),
+                Chart(expenses: _registeredExpenses),
                 Expanded(child: mainContent),
               ],
             )
           : Column(
               children: [
-                Expanded(child: Chart(expenses: _regiseredExpenses)),
+                Expanded(child: Chart(expenses: _registeredExpenses)),
                 Expanded(child: mainContent),
               ],
             ),

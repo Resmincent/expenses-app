@@ -1,6 +1,7 @@
 import 'package:expense_app/models/expense.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 
 class NewExpenses extends StatefulWidget {
   const NewExpenses({super.key, required this.onAddExpense});
@@ -17,6 +18,13 @@ class _NewExpensesState extends State<NewExpenses> {
   DateTime? _selectedDate;
   Category _selectedCategory = Category.etc;
   final formatter = DateFormat.yMEd();
+  late Box<Expense> _expenseBox;
+
+  @override
+  void initState() {
+    super.initState();
+    _expenseBox = Hive.box<Expense>('expenses');
+  }
 
   void _presentDatePicker() async {
     final now = DateTime.now();
@@ -35,8 +43,9 @@ class _NewExpensesState extends State<NewExpenses> {
     }
   }
 
-  void _submitExpenseData() {
+  Future<void> _submitExpenseData() async {
     final enteredAmount = double.tryParse(_amountController.text);
+    print('Entered amount: $enteredAmount');
     final amountIsInvalid = enteredAmount == null || enteredAmount <= 0;
 
     if (_titleController.text.trim().isEmpty ||
@@ -61,15 +70,45 @@ class _NewExpensesState extends State<NewExpenses> {
       return;
     }
 
-    widget.onAddExpense(
-      Expense(
+    try {
+      // Create new expense
+      final newExpense = Expense(
         title: _titleController.text,
         amount: enteredAmount,
         date: _selectedDate!,
         category: _selectedCategory,
-      ),
-    );
-    Navigator.pop(context);
+      );
+
+      print('New expense created: ${newExpense.title}');
+
+      // Save to Hive
+      await _expenseBox.add(newExpense);
+      print('Expense added to box');
+      // Call the callback function
+      widget.onAddExpense(newExpense);
+
+      // Close the modal
+      if (mounted) {
+        Navigator.pop(context);
+      }
+    } catch (e) {
+      print('Error adding expense: $e');
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Error'),
+            content: Text('Failed to save expense: ${e.toString()}'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -81,18 +120,15 @@ class _NewExpensesState extends State<NewExpenses> {
 
   @override
   Widget build(BuildContext context) {
+    final keyboardSpace = MediaQuery.of(context).viewInsets.bottom;
+
     return SafeArea(
       child: GestureDetector(
         onTap: () => FocusScope.of(context).unfocus(),
         child: SingleChildScrollView(
           keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
           child: Padding(
-            padding: EdgeInsets.only(
-              left: 16,
-              right: 16,
-              top: 16,
-              bottom: MediaQuery.of(context).viewInsets.bottom + 16,
-            ),
+            padding: EdgeInsets.fromLTRB(16, 16, 16, keyboardSpace + 16),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
