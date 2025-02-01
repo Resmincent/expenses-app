@@ -45,7 +45,6 @@ class _NewExpensesState extends State<NewExpenses> {
 
   Future<void> _submitExpenseData() async {
     final enteredAmount = double.tryParse(_amountController.text);
-    print('Entered amount: $enteredAmount');
     final amountIsInvalid = enteredAmount == null || enteredAmount <= 0;
 
     if (_titleController.text.trim().isEmpty ||
@@ -79,11 +78,8 @@ class _NewExpensesState extends State<NewExpenses> {
         category: _selectedCategory,
       );
 
-      print('New expense created: ${newExpense.title}');
-
       // Save to Hive
       await _expenseBox.add(newExpense);
-      print('Expense added to box');
       // Call the callback function
       widget.onAddExpense(newExpense);
 

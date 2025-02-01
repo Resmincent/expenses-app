@@ -4,6 +4,8 @@ import 'package:expense_app/models/expense.dart';
 import 'package:expense_app/widgets/new_expenses.dart';
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:intl/intl.dart';
+import 'package:month_year_picker/month_year_picker.dart';
 
 class Expenses extends StatefulWidget {
   const Expenses({super.key});
@@ -15,6 +17,7 @@ class Expenses extends StatefulWidget {
 class _ExpensesState extends State<Expenses> {
   late Box<Expense> _expenseBox;
   List<Expense> _registeredExpenses = [];
+  DateTime _selectedMonth = DateTime.now();
 
   @override
   void initState() {
@@ -33,6 +36,36 @@ class _ExpensesState extends State<Expenses> {
     });
   }
 
+  List<Expense> get _filteredExpenses {
+    return _registeredExpenses.where((expense) {
+      return expense.date.year == _selectedMonth.year &&
+          expense.date.month == _selectedMonth.month;
+    }).toList();
+  }
+
+  double get _totalMonthlyExpenses {
+    return _filteredExpenses.fold(
+      0.0,
+      (sum, expense) => sum + expense.amount,
+    );
+  }
+
+  void _showMonthPicker() async {
+    final picked = await showMonthYearPicker(
+      context: context,
+      initialDate: _selectedMonth,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now(),
+      locale: const Locale('id', 'ID'),
+    );
+
+    if (picked != null) {
+      setState(() {
+        _selectedMonth = picked;
+      });
+    }
+  }
+
   void _openAddExpenseOverlay() {
     showModalBottomSheet(
       isScrollControlled: true,
@@ -44,16 +77,29 @@ class _ExpensesState extends State<Expenses> {
   }
 
   Future<void> _addExpense(Expense expense) async {
-    setState(() {
-      _registeredExpenses.add(expense);
-    });
+    try {
+      final key = _expenseBox.length + 1;
+      await _expenseBox.put(key, expense);
+
+      setState(() {
+        _registeredExpenses.add(expense);
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to add expense. Please try again.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _removeExpense(Expense expense) async {
     final expenseIndex = _registeredExpenses.indexOf(expense);
     final deletedExpense = _registeredExpenses[expenseIndex];
 
-    // Find the key in Hive box for this expense
     final key = _expenseBox.keys.firstWhere(
       (k) => _expenseBox.get(k)?.id == expense.id,
       orElse: () => -1,
@@ -88,45 +134,78 @@ class _ExpensesState extends State<Expenses> {
   @override
   Widget build(BuildContext context) {
     final width = MediaQuery.of(context).size.width;
+    final formatter = NumberFormat.currency(
+      locale: 'id_ID',
+      symbol: 'Rp',
+      decimalDigits: 2,
+    );
 
     Widget mainContent = const Center(
       child: Text('Tidak ada pengeluaran'),
     );
 
-    if (_registeredExpenses.isNotEmpty) {
+    if (_filteredExpenses.isNotEmpty) {
       mainContent = ExpensesList(
-        expenses: _registeredExpenses,
+        expenses: _filteredExpenses,
         onRemoveExpense: _removeExpense,
       );
     }
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'Pengeluaran',
-        ),
+        title: const Text('Pengeluaran'),
         actions: [
+          TextButton.icon(
+            onPressed: _showMonthPicker,
+            icon: const Icon(
+              Icons.calendar_month,
+              color: Colors.white,
+            ),
+            label: Text(
+              DateFormat('MMMM yyyy', 'id_ID').format(_selectedMonth),
+              style: const TextStyle(color: Colors.white),
+            ),
+          ),
           IconButton(
             onPressed: _openAddExpenseOverlay,
-            icon: const Icon(
-              Icons.add,
-            ),
-          )
+            icon: const Icon(Icons.add),
+          ),
         ],
       ),
       body: width < 600
           ? Column(
               children: [
-                Chart(expenses: _registeredExpenses),
+                Chart(expenses: _filteredExpenses),
                 Expanded(child: mainContent),
               ],
             )
-          : Column(
+          : Row(
               children: [
-                Expanded(child: Chart(expenses: _registeredExpenses)),
+                Expanded(
+                  child: Chart(expenses: _filteredExpenses),
+                ),
                 Expanded(child: mainContent),
               ],
             ),
+      bottomNavigationBar: Container(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Total Pengeluaran Bulan Ini:',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            Text(
+              formatter.format(_totalMonthlyExpenses),
+              style: Theme.of(context).textTheme.titleLarge!.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: Theme.of(context).primaryColor,
+                  ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
